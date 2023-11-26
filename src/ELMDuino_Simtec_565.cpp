@@ -152,7 +152,13 @@ bool ELM327_Simtec_565::initializeELM(int SelectProtocol)
 	{
 		if (strstr(payload, "OK") != NULL)
 		{
-			connected = true;Vehicle Indification Number (VIN)
+			connected = true;
+
+			if (debugMode)
+				Serial.println("--------Connected with ELM327--------");
+		}
+	}
+	
 	// Bus Init: OK
 	sendCommand_Blocking("81");
 	delay(100);
