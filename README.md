@@ -71,26 +71,26 @@ void loop()
 
 # Protocols:
 ```C++
-  4        - ISO 14230-4 KWP (5 baud init)
-  5        - ISO 14230-4 KWP (fast init)
+4        - ISO 14230-4 KWP (5 baud init)
+5        - ISO 14230-4 KWP (fast init)
 ```
 
 
 # Functions:
 ```C++
-	bool get_vin();
+bool get_vin();
 
-    float getECU_VCC();
-	int getMOTOR_RPM();
-	int getCAR_SPEED();
-	float getINJECTOR_PULSE();
-	int getREQUIRED_MOTOR_RPM();
-	float getLAMBDA_VCC();
-	float getCYL_IGN_ANGLE(int Cylinder = 0);
-	float getTROTTLE_POS();
-	int getIDLE_REGULATOR();
-	float getCOOLANT_TEMP_VCC();
-	float getSUCTION_TEMP_VCC();
+float getECU_VCC();
+int getMOTOR_RPM();
+int getCAR_SPEED();
+float getINJECTOR_PULSE();
+int getREQUIRED_MOTOR_RPM();
+float getLAMBDA_VCC();
+float getCYL_IGN_ANGLE(int Cylinder = 0);
+float getTROTTLE_POS();
+int getIDLE_REGULATOR();
+float getCOOLANT_TEMP_VCC();
+float getSUCTION_TEMP_VCC();
 ```
 
 
