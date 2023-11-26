@@ -139,7 +139,7 @@ To change the protocol, change the 2 transfer variable to 4 (5 baud) or 5 (FAST)
 The debug output can be changed to false or true using the 3 transfer variables.
 You can also add a variable that can be transferred separated by a comma and that is the delay when fetching the data. between 1000 and 2000 is advisable. I use 2000 and have no problems reading it out.
 
-# Example Knock Delay Code:
+# Example Connection:
 ```C++
 .....
 
