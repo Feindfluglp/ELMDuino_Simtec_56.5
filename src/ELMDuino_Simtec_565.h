@@ -156,7 +156,7 @@ public:
 
 
 
-	bool begin(Stream& stream, int SelectProtocol, const bool& debug = false, const uint16_t& timeout = 2000, const uint16_t& payloadLen = 200 );
+	bool begin(Stream& stream, int SelectProtocol, const bool& debug = false, const uint16_t& timeout = 2000, const uint16_t& payloadLen = 200);
 	bool initializeELM(int SelectProtocol);
 	void flushInputBuff();
 	uint64_t findResponse();

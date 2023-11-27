@@ -54,22 +54,24 @@
 */
 bool ELM327_Simtec_565::begin(Stream &stream, int SelectProtocol, const bool &debug, const uint16_t &timeout, const uint16_t &payloadLen)
 {
-	elm_port    = &stream;
-	PAYLOAD_LEN = payloadLen;
-	debugMode   = debug;
-	timeout_ms  = timeout;
+	elm_port = &stream;
+    PAYLOAD_LEN = payloadLen;
+    debugMode = debug;
+    timeout_ms = timeout;
+    payload = new char[PAYLOAD_LEN + 1]; // allow for terminating '\0'
 
-	payload = (char *)malloc(PAYLOAD_LEN + 1); // allow for terminating '\0'
+    // test if serial port is connected
+    if (!elm_port)
+        return false;
 
-	// test if serial port is connected
-	if (!elm_port)
-		return false;
+    // try to connect
+    if (!initializeELM(SelectProtocol)) 
+	{
+        delete[] payload; // free allocated memory
+        return false;
+    }
 
-	// try to connect
-	if (!initializeELM(SelectProtocol))
-		return false;
-
-	return true;
+    return true;
 }
 
 
@@ -98,74 +100,70 @@ bool ELM327_Simtec_565::begin(Stream &stream, int SelectProtocol, const bool &de
 
   * --> *user adjustable
 */
-bool ELM327_Simtec_565::initializeELM(int SelectProtocol)
+bool ELM327_Simtec_565::initializeELM(int SelectProtocol) 
 {
 	char command[10] = {'\0'};
 	connected = false;
 
+	const int delayTime = 100; // Zeitverzögerung in Millisekunden
+
 	sendCommand_Blocking(SET_ALL_TO_DEFAULTS);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(RESET_ALL);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(ECHO_OFF);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(HEADERS_ON);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(PRINTING_SPACES_OFF);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(LINEFEEDS_OFF);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(ALLOW_LONG_MESSAGES);
-	delay(100);
-	
+	delay(delayTime);
+
 	sendCommand_Blocking(MEMORY_OFF);
-	delay(100);
+	delay(delayTime);
 
 	sendCommand_Blocking(ADAPTIVE_TIMING_AUTO_1);
-	delay(100);
+	delay(delayTime);
 
-	// Set header
+	// Setze Header
 	sprintf(command, SET_HEADER, "8211F1");
 	sendCommand_Blocking(command);
-	delay(100);
+	delay(delayTime);
 
-	// Set data timeout
+	// Setze Daten-Timeout
 	sprintf(command, SET_TIMEOUT_TO_H_X_4MS, "64");
 	sendCommand_Blocking(command);
-	delay(100);
+	delay(delayTime);
 
-	// Set wakeup timeout
+	// Setze Wakeup-Timeout
 	sprintf(command, SET_WAKEUP_TO_H_X_20MS, "00");
 	sendCommand_Blocking(command);
-	delay(100);
+	delay(delayTime);
 
-	// Set protocol and save
+	// Setze Protokoll und speichere
 	sprintf(command, SET_PROTOCOL_TO_H_SAVE, SelectProtocol);
-
-	if (sendCommand_Blocking(command) == ELM_SUCCESS)
-	{
-		if (strstr(payload, "OK") != NULL)
-		{
-			connected = true;
-
-			if (debugMode)
-				Serial.println("--------Connected with ELM327--------");
+	if (sendCommand_Blocking(command) == ELM_SUCCESS) {
+		if (strstr(payload, "OK") != NULL) {
+		connected = true;
+		if (debugMode) Serial.println("--------Verbunden mit ELM327--------");
 		}
 	}
-	
-	// Bus Init: OK
+
+	// Bus-Initialisierung: OK
 	sendCommand_Blocking("81");
-	delay(100);
+	delay(delayTime);
 
 	return connected;
 }
-
 
 
 
@@ -186,9 +184,9 @@ bool ELM327_Simtec_565::initializeELM(int SelectProtocol)
  -------
   * void
 */
-void ELM327_Simtec_565::formatQueryArray(uint8_t service, uint16_t pid, uint8_t num_responses)
+void ELM327_Simtec_565::formatQueryArray(uint8_t service, uint16_t pid, uint8_t num_responses) 
 {
-	if (debugMode)
+	if (debugMode) 
 	{
 		Serial.print(F("Service: "));
 		Serial.println(service);
@@ -199,46 +197,35 @@ void ELM327_Simtec_565::formatQueryArray(uint8_t service, uint16_t pid, uint8_t 
 	query[0] = ((service >> 4) & 0xF) + '0';
 	query[1] = (service & 0xF) + '0';
 
-	// determine PID length (standard queries have 16-bit PIDs,
-	// but some custom queries have PIDs with 32-bit values)
-	if (pid & 0xFF00)
+	// Bestimme die Länge der PID (Standardabfragen haben 16-Bit-PIDs,
+	// aber einige benutzerdefinierte Abfragen haben PIDs mit 32-Bit-Werten)
+	if (pid & 0xFF00) 
 	{
 		if (debugMode)
 			Serial.println(F("Long query detected"));
-
 		longQuery = true;
-
-		query[2] = ((pid >> 12) & 0xF) + '0';
-		query[3] = ((pid >> 8) & 0xF) + '0';
-		query[4] = ((pid >> 4) & 0xF) + '0';
-		query[5] = (pid & 0xF) + '0';
+		sprintf(query + 2, "%04X", pid);
 		query[6] = num_responses + '0';
 		query[7] = '\0';
-
 		upper(query, 6);
-	}
-	else
+	} 
+	else 
 	{
 		if (debugMode)
 			Serial.println(F("Normal length query detected"));
-
 		longQuery = false;
-
-		query[2] = ((pid >> 4) & 0xF) + '0';
-		query[3] = (pid & 0xF) + '0';
+		sprintf(query + 2, "%02X", pid);
 		query[4] = num_responses + '0';
 		query[5] = '\0';
-
 		upper(query, 4);
 	}
 
-	if (debugMode)
+	if (debugMode) 
 	{
 		Serial.print(F("Query string: "));
 		Serial.println(query);
 	}
 }
-
 
 
 
@@ -259,14 +246,18 @@ void ELM327_Simtec_565::formatQueryArray(uint8_t service, uint16_t pid, uint8_t 
  -------
   * void
 */
-void ELM327_Simtec_565::upper(char string[], uint8_t buflen)
+void ELM327_Simtec_565::upper(char string[], uint8_t buflen) 
 {
-	for (uint8_t i = 0; i < buflen; i++)
+	for (uint8_t i = 0; i < buflen; i++) 
 	{
-		if (string[i] > 'Z')
+		if (string[i] >= 'a' && string[i] <= 'z') 
+		{
 			string[i] -= 32;
-		else if ((string[i] > '9') && (string[i] < 'A'))
+		} 
+		else if (string[i] > '9' && string[i] < 'A') 
+		{
 			string[i] += 7;
+		}
 	}
 }
 
@@ -288,12 +279,10 @@ void ELM327_Simtec_565::upper(char string[], uint8_t buflen)
  -------
   * bool - whether or not a time-out has occurred
 */
-bool ELM327_Simtec_565::timeout()
+bool ELM327_Simtec_565::timeout() 
 {
 	currentTime = millis();
-	if ((currentTime - previousTime) >= timeout_ms)
-		return true;
-	return false;
+	return (currentTime - previousTime) >= timeout_ms;
 }
 
 
@@ -314,14 +303,17 @@ bool ELM327_Simtec_565::timeout()
  -------
   * uint8_t - int value of parameter "value"
 */
-uint8_t ELM327_Simtec_565::ctoi(uint8_t value)
+uint8_t ELM327_Simtec_565::ctoi(uint8_t value) 
 {
-	if (value >= 'A')
+	if (value >= 'A') 
+	{
 		return value - 'A' + 10;
-	else
+	} 
+	else 
+	{
 		return value - '0';
+	}
 }
-
 
 
 
@@ -347,33 +339,22 @@ uint8_t ELM327_Simtec_565::ctoi(uint8_t value)
   instance of target in str. -1 if there is no
   numOccur'th instance of target in str
 */
-int8_t ELM327_Simtec_565::nextIndex(char const *str,
-												 char const *target,
-												 uint8_t numOccur = 1)
+int8_t ELM327_Simtec_565::nextIndex(char const *str, char const *target, uint8_t numOccur = 1) 
 {
 	char const *p = str;
 	char const *r = str;
 	uint8_t count;
 
-	for (count = 0;; ++count)
+	for (count = 0; count < numOccur; ++count) 
 	{
 		p = strstr(p, target);
-
-		if (count == (numOccur - 1))
-			break;
-
-		if (!p)
-			break;
-
+		if (!p) break;
 		p++;
 	}
 
-	if (!p)
-		return -1;
-
+	if (!p) return -1;
 	return p - r;
 }
-
 
 
 
@@ -392,13 +373,17 @@ int8_t ELM327_Simtec_565::nextIndex(char const *str,
  -------
   * void
 */
-void ELM327_Simtec_565::flushInputBuff()
+void ELM327_Simtec_565::flushInputBuff() 
 {
-	if (debugMode)
+	if (debugMode) 
+	{
 		Serial.println(F("Clearing input serial buffer"));
+	}
 
-	while (elm_port->available())
+	while (elm_port->available()) 
+	{
 		elm_port->read();
+	}
 }
 
 
@@ -450,15 +435,10 @@ bool ELM327_Simtec_565::queryPID(const uint8_t& service, const uint16_t& pid, co
  -------
   * bool - Whether or not the query was submitted successfully
 */
-bool ELM327_Simtec_565::queryPID(char queryStr[])
+bool ELM327_Simtec_565::queryPID(char queryStr[]) 
 {
-	if (strlen(queryStr) <= 4)
-		longQuery = false;
-	else
-		longQuery = true;
-
+	longQuery = (strlen(queryStr) > 4);
 	sendCommand(queryStr);
-
 	return connected;
 }
 
@@ -528,10 +508,15 @@ void ELM327_Simtec_565::sendCommand(const char *cmd)
  -------
   * int8_t - the ELM_XXX status of getting the OBD response
 */
-int8_t ELM327_Simtec_565::sendCommand_Blocking(const char *cmd)
+int8_t ELM327_Simtec_565::sendCommand_Blocking(const char *cmd) 
 {
 	sendCommand(cmd);
-	while (get_response() == ELM_GETTING_MSG);
+
+	while (nb_rx_state == ELM_GETTING_MSG) 
+	{
+		get_response();
+	}
+
 	return nb_rx_state;
 }
 
@@ -554,103 +539,105 @@ int8_t ELM327_Simtec_565::sendCommand_Blocking(const char *cmd)
  -------
   * int8_t - the ELM_XXX status of getting the OBD response
 */
-int8_t ELM327_Simtec_565::get_response(void)
+int8_t ELM327_Simtec_565::get_response(void) 
 {
-	// buffer the response of the ELM327 until either the
-	// end marker is read or a timeout has occurred
-	// last valid idx is PAYLOAD_LEN but want to keep one free for terminating '\0'
-	// so limit counter to < PAYLOAD_LEN
-	if (!elm_port->available())
+	if (!elm_port->available()) 
 	{
 		nb_rx_state = ELM_GETTING_MSG;
 		if (timeout())
 			nb_rx_state = ELM_TIMEOUT;
-	}
-	else
+	} 
+	else 
 	{
 		char recChar = elm_port->read();
 
-		if (debugMode)
+		if (debugMode) 
 		{
 			Serial.print(F("\tReceived char: "));
-			// display each received character, make non-printables printable
-			if (recChar == '\f')
-				Serial.println(F("\\f"));
-			else if (recChar == '\n')
-				Serial.println(F("\\n"));
-			else if (recChar == '\r')
-				Serial.println(F("\\r"));
-			else if (recChar == '\t')
-				Serial.println(F("\\t"));
-			else if (recChar == '\v')
-				Serial.println(F("\\v"));
-			// convert spaces to underscore, easier to see in debug output
-			else if (recChar == ' ')
-				Serial.println("_");
-			// display regular printable
-			else
-				Serial.println(recChar);
+
+			switch (recChar) 
+			{
+				case '\f':
+					Serial.println(F("\\f"));
+					break;
+				case '\n':
+					Serial.println(F("\\n"));
+					break;
+				case '\r':
+					Serial.println(F("\\r"));
+					break;
+				case '\t':
+					Serial.println(F("\\t"));
+					break;
+				case '\v':
+					Serial.println(F("\\v"));
+					break;
+				case ' ':
+					Serial.println("_");
+					break;
+				default:
+					Serial.println(recChar);
+			}
 		}
 
-		// this is the end of the OBD response
-		if (recChar == '>')
+		if (recChar == '>') 
 		{
 			if (debugMode)
-				Serial.println(F("Delimiter found."));
+			Serial.println(F("Delimiter found."));
 
 			nb_rx_state = ELM_MSG_RXD;
-		}
-		else if (!isalnum(recChar) && (recChar != ':') && (recChar != '.'))
-			// discard all characters except for alphanumeric and decimal places.
-			// decimal places needed to extract floating point numbers, e.g. battery voltage
-			nb_rx_state = ELM_GETTING_MSG; // Discard this character
-		else
+		} 
+		else if (!isalnum(recChar) && recChar != ':' && recChar != '.') 
 		{
-			if (recBytes < PAYLOAD_LEN)
+			nb_rx_state = ELM_GETTING_MSG;
+		} 
+		else 
+		{
+			if (recBytes < PAYLOAD_LEN) 
 			{
-				payload[recBytes] = recChar;
-				recBytes++;
+				payload[recBytes++] = recChar;
 				nb_rx_state = ELM_GETTING_MSG;
-			}
+			} 
 			else
+			{
 				nb_rx_state = ELM_BUFFER_OVERFLOW;
+			}
 		}
 	}
 
-	// Message is still being received (or is timing out), so exit early without doing all the other checks
 	if (nb_rx_state == ELM_GETTING_MSG)
 		return nb_rx_state;
 
-	// End of response delimiter was found
-	if (debugMode && nb_rx_state == ELM_MSG_RXD)
+	if (debugMode && nb_rx_state == ELM_MSG_RXD) 
 	{
 		Serial.print(F("All chars received: "));
 		Serial.println(payload);
 	}
 
-	if (nb_rx_state == ELM_TIMEOUT)
+	if (nb_rx_state == ELM_TIMEOUT) 
 	{
-		if (debugMode)
+		if (debugMode) 
 		{
 			Serial.print(F("Timeout detected with overflow of "));
 			Serial.print((currentTime - previousTime) - timeout_ms);
 			Serial.println(F("ms"));
 		}
+
 		return nb_rx_state;
 	}
 
-	if (nb_rx_state == ELM_BUFFER_OVERFLOW)
+	if (nb_rx_state == ELM_BUFFER_OVERFLOW) 
 	{
-		if (debugMode)
+		if (debugMode) 
 		{
 			Serial.print(F("OBD receive buffer overflow (> "));
 			Serial.print(PAYLOAD_LEN);
 			Serial.println(F(" bytes)"));
 		}
+
 		return nb_rx_state;
 	}
 
-	// Now we have successfully received OBD response, check if the payload indicates any OBD errors
 	if (nextIndex(payload, "UNABLETOCONNECT") >= 0)
 	{
 		if (debugMode)
@@ -662,7 +649,7 @@ int8_t ELM327_Simtec_565::get_response(void)
 
 	connected = true;
 
-	if (nextIndex(payload, "NODATA") >= 0)
+	if (nextIndex(payload, "NODATA") >= 0) 
 	{
 		if (debugMode)
 			Serial.println(F("ELM responded with errror \"NO DATA\""));
@@ -671,7 +658,7 @@ int8_t ELM327_Simtec_565::get_response(void)
 		return nb_rx_state;
 	}
 
-	if (nextIndex(payload, "STOPPED") >= 0)
+	if (nextIndex(payload, "STOPPED") >= 0) 
 	{
 		if (debugMode)
 			Serial.println(F("ELM responded with errror \"STOPPED\""));
@@ -680,7 +667,7 @@ int8_t ELM327_Simtec_565::get_response(void)
 		return nb_rx_state;
 	}
 
-	if (nextIndex(payload, "ERROR") >= 0)
+	if (nextIndex(payload, "ERROR") >= 0) 
 	{
 		if (debugMode)
 			Serial.println(F("ELM responded with \"ERROR\""));
@@ -692,7 +679,6 @@ int8_t ELM327_Simtec_565::get_response(void)
 	nb_rx_state = ELM_SUCCESS;
 	return nb_rx_state;
 }
-
 
 
 
@@ -711,29 +697,21 @@ int8_t ELM327_Simtec_565::get_response(void)
  -------
   * uint64_t - Query response value
 */
-uint64_t ELM327_Simtec_565::findResponse()
+uint64_t ELM327_Simtec_565::findResponse() 
 {
 	uint8_t firstDatum = 0;
 	char header[7] = {'\0'};
 
-	if (longQuery)
+	if (longQuery) 
 	{
-		header[0] = query[0] + 4;
-		header[1] = query[1];
-		header[2] = query[2];
-		header[3] = query[3];
-		header[4] = query[4];
-		header[5] = query[5];
-	}
-	else
+		memcpy(header, query, 6);
+	} 
+	else 
 	{
-		header[0] = query[0] + 4;
-		header[1] = query[1];
-		header[2] = query[2];
-		header[3] = query[3];
+		memcpy(header, query, 4);
 	}
 
-	if (debugMode)
+	if (debugMode) 
 	{
 		Serial.print(F("Expected response header: "));
 		Serial.println(header);
@@ -742,7 +720,7 @@ uint64_t ELM327_Simtec_565::findResponse()
 	int8_t firstHeadIndex = nextIndex(payload, header);
 	int8_t secondHeadIndex = nextIndex(payload, header, 2);
 
-	if (firstHeadIndex >= 0)
+	if (firstHeadIndex >= 0) 
 	{
 		if (longQuery)
 			firstDatum = firstHeadIndex + 6;
@@ -753,13 +731,13 @@ uint64_t ELM327_Simtec_565::findResponse()
 		// "responses" per query. "numPayChars" represents the
 		// correct number of bytes returned by the ELM327
 		// regardless of how many "responses" were returned
-		if (secondHeadIndex >= 0)
+		if (secondHeadIndex >= 0) 
 		{
 			if (debugMode)
 				Serial.println(F("Double response detected"));
 
 			numPayChars = secondHeadIndex - firstDatum;
-		}
+		} 
 		else
 		{
 			if (debugMode)
@@ -769,11 +747,12 @@ uint64_t ELM327_Simtec_565::findResponse()
 		}
 
 		response = 0;
-		for (uint8_t i = 0; i < numPayChars; i++)
+
+		for (uint8_t i = 0; i < numPayChars; i++) 
 		{
 			uint8_t payloadIndex = firstDatum + i;
 			uint8_t bitsOffset = 4 * (numPayChars - i - 1);
-			response = response | (ctoi(payload[payloadIndex]) << bitsOffset);
+			response |= static_cast<uint64_t>(ctoi(payload[payloadIndex])) << bitsOffset;
 		}
 
 		// It is useful to have the response bytes
@@ -789,7 +768,7 @@ uint64_t ELM327_Simtec_565::findResponse()
 		responseByte_6 = (response >> 48) & 0xFF;
 		responseByte_7 = (response >> 56) & 0xFF;
 
-		if (debugMode)
+		if (debugMode) 
 		{
 			Serial.println(F("64-bit response: "));
 			Serial.print(F("\tresponseByte_0: "));
@@ -821,7 +800,6 @@ uint64_t ELM327_Simtec_565::findResponse()
 
 
 
-
 /*
  void ELM327_Simtec_565::printError()
 
@@ -837,33 +815,42 @@ uint64_t ELM327_Simtec_565::findResponse()
  -------
   * void
 */
-void ELM327_Simtec_565::printError()
+void ELM327_Simtec_565::printError() 
 {
 	Serial.print(F("Received: "));
 	Serial.println(payload);
 
-	if (nb_rx_state == ELM_SUCCESS)
-		Serial.println(F("ELM_SUCCESS"));
-	else if (nb_rx_state == ELM_NO_RESPONSE)
-		Serial.println(F("ERROR: ELM_NO_RESPONSE"));
-	else if (nb_rx_state == ELM_BUFFER_OVERFLOW)
-		Serial.println(F("ERROR: ELM_BUFFER_OVERFLOW"));
-	else if (nb_rx_state == ELM_UNABLE_TO_CONNECT)
-		Serial.println(F("ERROR: ELM_UNABLE_TO_CONNECT"));
-	else if (nb_rx_state == ELM_NO_DATA)
-		Serial.println(F("ERROR: ELM_NO_DATA"));
-	else if (nb_rx_state == ELM_STOPPED)
-		Serial.println(F("ERROR: ELM_STOPPED"));
-	else if (nb_rx_state == ELM_TIMEOUT)
-		Serial.println(F("ERROR: ELM_TIMEOUT"));
-	else if (nb_rx_state == ELM_BUFFER_OVERFLOW)
-		Serial.println(F("ERROR: BUFFER OVERFLOW"));
-	else if (nb_rx_state == ELM_GENERAL_ERROR)
-		Serial.println(F("ERROR: ELM_GENERAL_ERROR"));
-	else
-		Serial.println(F("No error detected"));
+	switch (nb_rx_state) 
+	{
+		case ELM_SUCCESS:
+			Serial.println(F("ELM_SUCCESS"));
+			break;
+		case ELM_NO_RESPONSE:
+			Serial.println(F("ERROR: ELM_NO_RESPONSE"));
+			break;
+		case ELM_BUFFER_OVERFLOW:
+			Serial.println(F("ERROR: ELM_BUFFER_OVERFLOW"));
+			break;
+		case ELM_UNABLE_TO_CONNECT:
+			Serial.println(F("ERROR: ELM_UNABLE_TO_CONNECT"));
+			break;
+		case ELM_NO_DATA:
+			Serial.println(F("ERROR: ELM_NO_DATA"));
+			break;
+		case ELM_STOPPED:
+			Serial.println(F("ERROR: ELM_STOPPED"));
+			break;
+		case ELM_TIMEOUT:
+			Serial.println(F("ERROR: ELM_TIMEOUT"));
+			break;
+		case ELM_GENERAL_ERROR:
+			Serial.println(F("ERROR: ELM_GENERAL_ERROR"));
+			break;
+		default:
+			Serial.println(F("No error detected"));
+ 	}
 
-	delay(100);
+  delay(100);
 }
 
 
@@ -886,28 +873,27 @@ void ELM327_Simtec_565::printError()
  -------
   * int - The Converted Decimal value
 */
-int ELM327_Simtec_565::ConvertHextoMathvalue(char HexValue1, char HexValue2)
+int ELM327_Simtec_565::ConvertHextoMathvalue(char HexValue1, char HexValue2) 
 {
-	if (HexValue1 != '\0' && HexValue2 != '\0')
+	if (HexValue1 != '\0' && HexValue2 != '\0') 
 	{
-		char Buffer [2] = { HexValue1, HexValue2 };
+		char Buffer[3] = {HexValue1, HexValue2, '\0'};
+		int BufferComb = strtol(Buffer, NULL, 16);
 
-		// Convert Hex to Decimal
-		int BufferComb = strtoul(Buffer, NULL, 16);
-
-		if (debugMode)
-		{
-			Serial.print("values: ");
-			Serial.print(HexValue1);
-			Serial.print(HexValue2);
-			Serial.print(" Finish: ");
-			Serial.println(BufferComb);
-		}
-		return BufferComb;
+	if (debugMode) 
+	{
+		Serial.print(F("values: "));
+		Serial.print(HexValue1);
+		Serial.print(HexValue2);
+		Serial.print(F(" Finish: "));
+		Serial.println(BufferComb, HEX);
 	}
+
+	return BufferComb;
+	}
+
 	return 0;
 }
-
 
 
 
@@ -924,31 +910,33 @@ int ELM327_Simtec_565::ConvertHextoMathvalue(char HexValue1, char HexValue2)
 */
 float ELM327_Simtec_565::getECU_VCC()
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
-	{
-		int Select1 = 18; // HEX Select Value 1
-		int Select2 = 19; // HEX Select Value 2
-		float Math1 = 25.5; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+    bool isOkay = get2101Data();
+
+    if (isOkay)
+    {
+        const int Select1 = 18; // HEX Select Value 1
+        const int Select2 = 19; // HEX Select Value 2
+        const float Math1 = 25.5; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
+
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal        
 		float MathValue = (BackData * Math1) / Math2; // Calculation
 
 		if (debugMode)
 		{
-			Serial.print("ECU VCC: ");
+			Serial.print(F("ECU VCC: "));
 			Serial.println(MathValue);
 		}
 
 		return MathValue;
-	}
-	else
-	{
-		if (debugMode)
-			Serial.println("ECU VCC not found");
+    }
+    else
+    {
+        if (debugMode)
+            Serial.println(F("ECU VCC not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -965,33 +953,35 @@ float ELM327_Simtec_565::getECU_VCC()
  -------
   * int
 */
-int ELM327_Simtec_565::getMOTOR_RPM()
+int ELM327_Simtec_565::getMOTOR_RPM() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
-	{
-		int Select1 = 36; // HEX Select Value 1
-		int Select2 = 37; // HEX Select Value 2
-		int Math1 = 8160; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		int MathValue = (BackData * Math1) / Math2; // Calculation
+    bool isOkay = get2101Data();
 
-		if (debugMode)
+    if (isOkay) 
+	{
+        const int Select1 = 36; // HEX Select Value 1
+        const int Select2 = 37; // HEX Select Value 2
+        const int Math1 = 8160; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
+
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        int MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("MOTOR RPM: ");
-			Serial.println(MathValue);
-		}
+            Serial.print(F("MOTOR RPM: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
-	else
+        return MathValue;
+    }
+	else 
 	{
-		if (debugMode)
-			Serial.println("MOTOR RPM not found");
+        if (debugMode)
+            Serial.println(F("MOTOR RPM not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1013,13 +1003,13 @@ int ELM327_Simtec_565::getCAR_SPEED()
 	bool isOkay = get2101Data();
 	if (isOkay)
 	{
-		int Select1 = 70; // HEX Select Value 1
-		int Select2 = 71; // HEX Select Value 2
+		const int Select1 = 70; // HEX Select Value 1
+		const int Select2 = 71; // HEX Select Value 2
 		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
 
 		if (debugMode)
 		{
-			Serial.print("CAR SPEED: ");
+			Serial.print(F("CAR SPEED: "));
 			Serial.println(BackData);
 		}
 
@@ -1028,7 +1018,7 @@ int ELM327_Simtec_565::getCAR_SPEED()
 	else
 	{
 		if (debugMode)
-			Serial.println("CAR SPEED not found");
+			Serial.println(F("CAR SPEED not found"));
 
 		return -1;
 	}
@@ -1048,42 +1038,43 @@ int ELM327_Simtec_565::getCAR_SPEED()
  -------
   * float
 */
-float ELM327_Simtec_565::getINJECTOR_PULSE()
+float ELM327_Simtec_565::getINJECTOR_PULSE() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
+    bool isOkay = get2101Data();
+
+    if (isOkay) 
 	{
-		int Select1 = 38; // HEX Select Value 1
-		int Select2 = 39; // HEX Select Value 2
-		float Math1 = 261.11; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+        const int Select1_1 = 38;
+        const int Select2_1 = 39;
+        const float Math1 = 261.11;
+        const int Math2 = 255;
 
-		Select1 = 46; // HEX Select Value 1
-		Select2 = 47; // HEX Select Value 2
-		Math1 = 1.02; // Calculator Param 1
-		Math2 = 255; // Calculator Param 2
-		BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue1 = (BackData * Math1) / Math2; // Calculation
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1_1], ClearArray[Select2_1]);
+        float MathValue = (BackData * Math1) / Math2;
 
-		if (debugMode)
+        const int Select1_2 = 46;
+        const int Select2_2 = 47;
+        const float Math1_2 = 1.02;
+
+        BackData = ConvertHextoMathvalue(ClearArray[Select1_2], ClearArray[Select2_2]);
+        float MathValue1 = (BackData * Math1_2) / Math2;
+
+        if (debugMode) 
 		{
-			Serial.print("INJECTOR PULSE: ");
-			Serial.println(MathValue + MathValue1);
-		}
+            Serial.println(F("INJECTOR PULSE: "));
+            Serial.println(MathValue + MathValue1);
+        }
 
-		return MathValue + MathValue1;
-	}
+        return MathValue + MathValue1;
+    }
 	else
 	{
-		if (debugMode)
-			Serial.println("INJECTOR PULSE not found");
+        if (debugMode)
+            Serial.println(F("INJECTOR PULSE not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
-
 
 
 
@@ -1098,36 +1089,36 @@ float ELM327_Simtec_565::getINJECTOR_PULSE()
  -------
   * int
 */
-int ELM327_Simtec_565::getREQUIRED_MOTOR_RPM()
+int ELM327_Simtec_565::getREQUIRED_MOTOR_RPM() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
-	{
-		int Select1 = 52; // HEX Select Value 1
-		int Select2 = 53; // HEX Select Value 2
-		int Math1 = 4080; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		int MathValue = (BackData * Math1) / Math2; // Calculation
+    bool isOkay = get2101Data();
 
-		if (debugMode)
+    if (isOkay) 
+	{
+        const int Select1 = 52; // HEX Select Value 1
+        const int Select2 = 53; // HEX Select Value 2
+        const int Math1 = 4080; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
+
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        int MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("REQUIRED MOTOR RPM: ");
-			Serial.println(MathValue);
-		}
+            Serial.println(F("REQUIRED MOTOR RPM: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
-	else
+        return MathValue;
+    } 
+	else 
 	{
-		if (debugMode)
-			Serial.println("REQUIRED MOTOR RPM not found");
+        if (debugMode)
+            Serial.println(F("REQUIRED MOTOR RPM not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
-
-
 
 
 /*
@@ -1143,31 +1134,32 @@ int ELM327_Simtec_565::getREQUIRED_MOTOR_RPM()
 */
 float ELM327_Simtec_565::getLAMBDA_VCC()
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
-	{
-		int Select1 = 54; // HEX Select Value 1
-		int Select2 = 55; // HEX Select Value 2
-		float Math1 = 4980; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+    bool isOkay = get2101Data();
 
-		if (debugMode)
+    if (isOkay) {
+        const int Select1 = 54; // HEX Select Value 1
+        const int Select2 = 55; // HEX Select Value 2
+        const float Math1 = 4980; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
+
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        float MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("LAMBDA VCC: ");
-			Serial.println(MathValue);
-		}
+            Serial.println(F("LAMBDA VCC: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
-	else
+        return MathValue;
+    } 
+	else 
 	{
-		if (debugMode)
-			Serial.println("LAMBDA VCC not found");
+        if (debugMode)
+            Serial.println(F("LAMBDA VCC not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1188,68 +1180,69 @@ float ELM327_Simtec_565::getLAMBDA_VCC()
  -------
   * float
 */
-float ELM327_Simtec_565::getCYL_IGN_ANGLE(int Cylinder)
+float ELM327_Simtec_565::getCYL_IGN_ANGLE(int Cylinder) 
 {
-	bool isOkay = get2101Data();
-	if (isOkay && Cylinder >= 1 && Cylinder <= CylinderNum)
+    bool isOkay = get2101Data();
+
+    if (isOkay && Cylinder >= 1 && Cylinder <= CylinderNum) 
 	{
-		int Select1, Select2;
+        int Select1, Select2;
 
-		switch(Cylinder)
+        switch (Cylinder) 
 		{
-			case 1:
+            case 1: 
 			{
-				Select1 = 26; // HEX Select Value 1
-				Select2 = 27; // HEX Select Value 2
-				break;
-			}
-
-			case 2:
+                Select1 = 26; // HEX Select Value 1
+                Select2 = 27; // HEX Select Value 2
+                break;
+            }
+            case 2: 
 			{
-				Select1 = 28; // HEX Select Value 1
-				Select2 = 29; // HEX Select Value 2
-				break;
-			}
-
-			case 3:
+                Select1 = 28; // HEX Select Value 1
+                Select2 = 29; // HEX Select Value 2
+                break;
+            }
+            case 3: 
 			{
-				Select1 = 30; // HEX Select Value 1
-				Select2 = 31; // HEX Select Value 2
-				break;
-			}
-
-			case 4:
+                Select1 = 30; // HEX Select Value 1
+                Select2 = 31; // HEX Select Value 2
+                break;
+            }
+            case 4: 
 			{
-				Select1 = 32; // HEX Select Value 1
-				Select2 = 33; // HEX Select Value 2
-				break;
-			}
-		}
+                Select1 = 32; // HEX Select Value 1
+                Select2 = 33; // HEX Select Value 2
+                break;
+            }
+        }
 
-		float Math1 = 95; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+        const float Math1 = 95; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
 
-		if (debugMode)
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        float MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("CYLINDER: ");
-			Serial.print(Cylinder);
-			Serial.print(" KNOCK DELAY: ");
-			Serial.println(MathValue);
-		}
+            Serial.print(F("CYLINDER: "));
+            Serial.print(Cylinder);
+            Serial.print(F(" KNOCK DELAY: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
+        return MathValue;
+    } 
 	else
 	{
-		if (debugMode)
-			Serial.print("CYLINDER: ");
-			Serial.print(Cylinder);
-			Serial.println(" KNOCK DELAY not found");
+        if (debugMode) 
+		{
+            Serial.print(F("CYLINDER: "));
+            Serial.print(Cylinder);
+            Serial.println(F(" KNOCK DELAY not found"));
+        }
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1267,32 +1260,34 @@ float ELM327_Simtec_565::getCYL_IGN_ANGLE(int Cylinder)
   * float
 */
 float ELM327_Simtec_565::getTROTTLE_POS()
-{
-	bool isOkay = get2101Data();
-	if (isOkay)
+ {
+    bool isOkay = get2101Data();
+
+    if (isOkay) 
 	{
-		int Select1 = 72; // HEX Select Value 1
-		int Select2 = 73; // HEX Select Value 2
-		float Math1 = 99; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+        const int Select1 = 72; // HEX Select Value 1
+        const int Select2 = 73; // HEX Select Value 2
+        const float Math1 = 99; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
 
-		if (debugMode)
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        float MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("TROTTLE POS: ");
-			Serial.println(MathValue);
-		}
+            Serial.println(F("TROTTLE POS: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
+        return MathValue;
+    }
 	else
 	{
-		if (debugMode)
-			Serial.println("TROTTLE POS not found");
+        if (debugMode)
+            Serial.println(F("TROTTLE POS not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1308,30 +1303,32 @@ float ELM327_Simtec_565::getTROTTLE_POS()
  -------
   * int
 */
-int ELM327_Simtec_565::getIDLE_REGULATOR()
+int ELM327_Simtec_565::getIDLE_REGULATOR() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
+    bool isOkay = get2101Data();
+
+    if (isOkay) 
 	{
-		int Select1 = 56; // HEX Select Value 1
-		int Select2 = 57; // HEX Select Value 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        const int Select1 = 56; // HEX Select Value 1
+        const int Select2 = 57; // HEX Select Value 2
 
-		if (debugMode)
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+
+        if (debugMode) 
 		{
-			Serial.print("IDLE REGULATOR: ");
-			Serial.println(BackData);
-		}
+            Serial.print(F("IDLE REGULATOR: "));
+            Serial.println(BackData);
+        }
 
-		return BackData;
-	}
+        return BackData;
+    }
 	else
 	{
-		if (debugMode)
-			Serial.println("IDLE REGULATOR not found");
+        if (debugMode)
+            Serial.println(F("IDLE REGULATOR not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1348,33 +1345,35 @@ int ELM327_Simtec_565::getIDLE_REGULATOR()
  -------
   * float
 */
-float ELM327_Simtec_565::getCOOLANT_TEMP_VCC()
+float ELM327_Simtec_565::getCOOLANT_TEMP_VCC() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
+    bool isOkay = get2101Data();
+
+    if (isOkay) 
 	{
-		int Select1 = 22; // HEX Select Value 1
-		int Select2 = 23; // HEX Select Value 2
-		float Math1 = 4.97; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+        const int Select1 = 22; // HEX Select Value 1
+        const int Select2 = 23; // HEX Select Value 2
+        const float Math1 = 4.97; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
 
-		if (debugMode)
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        float MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("COOLANT TEMP VCC: ");
-			Serial.println(MathValue);
-		}
+            Serial.print(F("COOLANT TEMP VCC: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
+        return MathValue;
+    }
 	else
 	{
-		if (debugMode)
-			Serial.println("COOLANT TEMP VCC not found");
+        if (debugMode)
+            Serial.println(F("COOLANT TEMP VCC not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
 
 
@@ -1391,35 +1390,36 @@ float ELM327_Simtec_565::getCOOLANT_TEMP_VCC()
  -------
   * float
 */
-float ELM327_Simtec_565::getSUCTION_TEMP_VCC()
+float ELM327_Simtec_565::getSUCTION_TEMP_VCC() 
 {
-	bool isOkay = get2101Data();
-	if (isOkay)
+    bool isOkay = get2101Data();
+
+    if (isOkay) 
 	{
-		int Select1 = 20; // HEX Select Value 1
-		int Select2 = 21; // HEX Select Value 2
-		float Math1 = 4.97; // Calculator Param 1
-		int Math2 = 255; // Calculator Param 2
-		int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
-		float MathValue = (BackData * Math1) / Math2; // Calculation
+        const int Select1 = 20; // HEX Select Value 1
+        const int Select2 = 21; // HEX Select Value 2
+        const float Math1 = 4.97; // Calculator Param 1
+        const int Math2 = 255; // Calculator Param 2
 
-		if (debugMode)
+        int BackData = ConvertHextoMathvalue(ClearArray[Select1], ClearArray[Select2]); // Convert to Decimal
+        float MathValue = (BackData * Math1) / Math2; // Calculation
+
+        if (debugMode) 
 		{
-			Serial.print("SUCTION TEMP VCC: ");
-			Serial.println(MathValue);
-		}
+            Serial.print(F("SUCTION TEMP VCC: "));
+            Serial.println(MathValue);
+        }
 
-		return MathValue;
-	}
+        return MathValue;
+    }
 	else
 	{
-		if (debugMode)
-			Serial.println("SUCTION TEMP VCC not found");
+        if (debugMode)
+            Serial.println(F("SUCTION TEMP VCC not found"));
 
-		return -1;
-	}
+        return -1;
+    }
 }
-
 
 
 
@@ -1434,66 +1434,43 @@ float ELM327_Simtec_565::getSUCTION_TEMP_VCC()
  -------
   * bool - is Data here or not
 */
-bool ELM327_Simtec_565::get2101Data()
+bool ELM327_Simtec_565::get2101Data() 
 {
-	if (debugMode)
-		Serial.println("Getting 2101 Data...");
-
-	// This is for old cars
-	sendCommand("2101");
-
-	while (get_response() == ELM_GETTING_MSG);
-
-	if (nb_rx_state == ELM_SUCCESS)
+    if (debugMode) 
 	{
-		// Clear Data
-		memset(ClearArray, 0, sizeof(ClearArray));
+        Serial.println(F("Getting 2101 Data..."));
+    }
 
-		if (strstr(payload, "80F1112B6101"))
-		{
-			/*
-				Clear Payload
-				Priority, Receiver and Transmitter (3 Byte Header)
+    sendCommand("2101");
 
-				
-				80F1112B610106034028056062000079FFFF4600000000FF00B946818EE6E27C4B008000000144041800060000810008
-				------------06034028056062000079FFFF4600000000FF00B946818EE6E27C4B008000000144041000060000810000
-							
-			*/
-			for(int i = 0; i < strlen(payload) - 11; i++)
-				ClearArray[i] = payload[i + 12];
+    while (get_response() == ELM_GETTING_MSG);
 
-			if (debugMode)
-			{
-				Serial.print("2101 Data: ");
-				Serial.println(ClearArray);
-			}
-
-			return true;
-		}
-		else
-		{
-			if (debugMode)
-			{
-				Serial.println("No 2101 Data found");
-				printError();
-			}
-
-			return false;
-		}
-	}
-	else
+    if (nb_rx_state == ELM_SUCCESS) 
 	{
-		if (debugMode)
+        const char* expectedResponse = "80F1112B6101";
+        int expectedResponseLength = strlen(expectedResponse);
+
+        if (strncmp(payload, expectedResponse, expectedResponseLength) == 0) 
 		{
-			Serial.println("No 2101 Data response");
-			printError();
-		}
-	}
-	return false;
+            strncpy(ClearArray, payload + expectedResponseLength, sizeof(ClearArray) - 1);
+
+            if (debugMode) 
+			{
+                Serial.print(F("2101 Data: "));
+                Serial.println(ClearArray);
+            }
+
+            return true;
+        }
+    }
+
+    if (debugMode) {
+        Serial.println(F("No 2101 Data found"));
+        printError();
+    }
+
+    return false;
 }
-
-
 
 
 /*
@@ -1507,72 +1484,83 @@ bool ELM327_Simtec_565::get2101Data()
  -------
   * bool - the ELM_XXX status of getting the VIN
 */
-bool ELM327_Simtec_565::get_vin()
+bool ELM327_Simtec_565::get_vin() 
 {
-	char temp[3] = {0};
-	char *idx;
-	uint8_t vin_counter = 0;
-	uint8_t ascii_val;
+    char temp[3] = {0};
+    char *idx;
+    uint8_t vin_counter = 0;
+    uint8_t ascii_val;
 
-	if (debugMode)
-		Serial.println("Getting VIN...");
+    if (debugMode) 
+	{
+        Serial.println(F("Getting VIN..."));
+    }
 
 	// This is for old cars
-	sendCommand("1A90");
+    sendCommand("1A90");
 
-	while (get_response() == ELM_GETTING_MSG);
+    while (get_response() == ELM_GETTING_MSG);
 
-	if (nb_rx_state == ELM_SUCCESS)
+    if (nb_rx_state == ELM_SUCCESS) 
 	{
 		// Clear Data
-		memset(vin, 0, sizeof(vin));
+        memset(vin, 0, sizeof(vin));
 
 		// **** Decoding ****
-		if (strstr(payload, "80F111135A90"))
+        if (strstr(payload, "80F111135A90")) 
 		{
-			idx = strstr(payload, "80F111135A90") + 6;  // Pointer to first ASCII code digit of first VIN digit
-			// Loop over each pair of ASCII code digits. 17 VIN digits + 2 skipped line numbers = 19 loops
-			for (int i = 6; i < (22 * 2); i += 2) {
-				temp[0] = *(idx + i);      // Get first digit of ASCII code
-				temp[1] = *(idx + i + 1);  // Get second digit of ASCII code
-				// No need to add string termination, temp[3] always == 0
-				if (strstr(temp, ":")) continue; // Skip the second "1:" and third "2:" line numbers
-				ascii_val = strtol(temp, 0, 16);                // Convert ASCII code to integer
-				sprintf(vin + vin_counter++, "%c", ascii_val);  // Convert ASCII code integer back to character
-			}
-			
-			if (debugMode)
-			{
-				Serial.print("VIN: ");
-				Serial.println(vin);
-			}
+            idx = strstr(payload, "80F111135A90") + 6;
 
-			return true;
-		}
+            for (int i = 6; i < (22 * 2); i += 2) 
+			{
+                temp[0] = *(idx + i);
+                temp[1] = *(idx + i + 1);
+
+                if (strstr(temp, ":")) 
+				{
+                    continue;
+                }
+
+                ascii_val = strtol(temp, 0, 16);
+                sprintf(vin + vin_counter++, "%c", ascii_val);
+            }
+
+            if (debugMode) 
+			{
+                Serial.print(F("VIN: "));
+                Serial.println(vin);
+            }
+
+            return true;
+        }
 		else
 		{
-			String noVin = "No Vin";
-			noVin.toCharArray(vin, noVin.length() + 1);
+            String noVin = "No Vin";
+            noVin.toCharArray(vin, noVin.length() + 1);
 
-			if (debugMode)
+            if (debugMode) 
 			{
-				Serial.println("No VIN found");
-				printError();
-			}
+                Serial.println(F("No VIN found"));
+                printError();
+            }
 
-			return false;
-		}
-	}
+            return false;
+        }
+    }
 	else
 	{
-		String noVin = "No Vin";
-		noVin.toCharArray(vin, noVin.length() + 1);
+        String noVin = "No Vin";
+        noVin.toCharArray(vin, noVin.length() + 1);
 
-		if (debugMode)
+        if (debugMode) 
 		{
-			Serial.println("No VIN response");
-			printError();
-		}
-	}
-	return false;
+            Serial.println(F("No VIN response"));
+            printError();
+        }
+    }
+
+    return false;
 }
+
+
+
