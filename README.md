@@ -89,8 +89,8 @@ void loop()
 
 # Protocols:
 ```C++
-4        - ISO 14230-4 KWP (5 baud init)
-5        - ISO 14230-4 KWP (fast init)
+#4        - ISO 14230-4 KWP (5 baud init)
+#5        - ISO 14230-4 KWP (fast init)
 ```
 
 
