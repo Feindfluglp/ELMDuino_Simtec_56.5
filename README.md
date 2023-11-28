@@ -10,7 +10,7 @@ Here you will find the original files, which can also be used to read out CAN an
 If anyone has any suggestions, ideas or other questions, just write here on Github.
 
 
-### Installation
+## Installation
 open arduino ide -> click sketch -> include libraries -> add zip libraries
 Now select the zip file that you just downloaded.
 Now you have an example under file -> examples -> ELMDuino_Simtec_56 -> Arduino_software_serial_test that you can use.
@@ -18,6 +18,14 @@ Now you have an example under file -> examples -> ELMDuino_Simtec_56 -> Arduino_
 
 # Example Code:
 ```C++
+/*
+ *  Modifcation Libary for Simtec 56.5 Engine Control Unit 
+ *  The Orginal Autor is: PowerBroker2
+ *  https://github.com/PowerBroker2/ELMduino
+ *  
+ *  Thx for Write all PowerBroker2
+ */
+
 #include <SoftwareSerial.h>
 #include "ELMDuino_Simtec_565.h"
 
@@ -29,6 +37,8 @@ SoftwareSerial mySerial(5, 4); // RX, TX
 ELM327_Simtec_565 myELM327;
 
 
+float ECU_VCC = 0;
+
 
 void setup()
 {
@@ -39,11 +49,17 @@ void setup()
 
   Serial.begin(115200);
   ELM_PORT.begin(38400);
-  
- 
-  Serial.println("Attempting to connect to ELM327...");
 
-  if (!myELM327.begin(ELM_PORT, 5, true))
+  Serial.println("Attempting to connect to ELM327...");
+/*
+ *  0 - ELM_PORT
+ *  1 - 4 is the Protocol ISO 14230-4 KWP (5 baud init)
+ *      5 is the Protocol ISO 14230-4 KWP (fast init)
+ *  2 - true or false for Debug all
+ *  3 - 2000 is the Delay Range: 1000 - 2000
+ *  The best Delay for me is 2000 (2 sec)
+ */
+  if (!myELM327.begin(ELM_PORT, 5, true, 2000))
   {
     Serial.println("Couldn't connect to OBD scanner");
     while (1);
@@ -55,13 +71,15 @@ void setup()
 
 void loop()
 {
-  float rpm = myELM327.getSUCTION_TEMP_VCC();
+  /*
+   * For more Info show in Readme
+   */
+  ECU_VCC = myELM327.getECU_VCC();
 
   if (myELM327.nb_rx_state == ELM_SUCCESS)
   {
-    Serial.print("RPM: "); 
-    Serial.println(rpm);
-    delay(2000);
+    Serial.print("ECU VCC: "); Serial.println(ECU_VCC);
+    delay(1000);
   }
   else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
     myELM327.printError();
@@ -94,7 +112,7 @@ float getSUCTION_TEMP_VCC();
 ```
 
 
-### Description for Vehicle Indification Number (VIN)
+## Description for Vehicle Indification Number (VIN)
 The function to get the vehicle identification number you have to get_vin(); address and then read out the vin.
 
 # Example Vin Code:
@@ -114,7 +132,7 @@ void loop()
 ```
 
 
-### Description for Cylinder Knock Delay (Function: getCYL_IGN_ANGLE)
+## Description for Cylinder Knock Delay (Function: getCYL_IGN_ANGLE)
 In order to read the knock delay correctly, you have to pass on the cylinder number. There are a maximum of 4 cylinders that can be addressed. (I can't promise if there will be more)
 
 # Example Knock Delay Code:
@@ -134,7 +152,7 @@ void loop()
 ```
 
 
-### Description ELM327 Connect
+## Description ELM327 Connect
 To change the protocol, change the 2 transfer variable to 4 (5 baud) or 5 (FAST).
 The debug output can be changed to false or true using the 3 transfer variables.
 You can also add a variable that can be transferred separated by a comma and that is the delay when fetching the data. between 1000 and 2000 is advisable. I use 2000 and have no problems reading it out.
