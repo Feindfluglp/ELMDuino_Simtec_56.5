@@ -153,8 +153,7 @@ public:
 	byte responseByte_5;
 	byte responseByte_6;
 	byte responseByte_7;
-
-
+	
 
 	bool begin(Stream& stream, int SelectProtocol, const bool& debug = false, const uint16_t& timeout = 2000, const uint16_t& payloadLen = 200);
 	bool initializeELM(int SelectProtocol);
@@ -197,6 +196,7 @@ private:
 	uint32_t previousTime;
 
 	obd_cmd_states nb_query_state = SEND_COMMAND; // Non-blocking query state
+    const char* ErrorProtocolMessage = "This protocol is not supported";
 
 	void upper(char string[], uint8_t buflen);
 	void formatQueryArray(uint8_t service, uint16_t pid, uint8_t num_responses);

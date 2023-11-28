@@ -24,7 +24,6 @@
 
 
 
-
 /*
  bool ELM327_Simtec_565::begin(Stream &stream, const bool& debug, const uint16_t& timeout, const char& protocol, const uint16_t& payloadLen)
 
@@ -54,6 +53,18 @@
 */
 bool ELM327_Simtec_565::begin(Stream &stream, int SelectProtocol, const bool &debug, const uint16_t &timeout, const uint16_t &payloadLen)
 {
+	if (SelectProtocol != 4 && SelectProtocol != 5)
+	{
+		Serial.println(ErrorProtocolMessage);
+		delay(5000);
+
+		#if defined(__ESP32__) || defined(__ESP8266__)
+			ESP.restart();
+		#else
+			while(1) {};
+		#endif
+	}
+
 	elm_port = &stream;
     PAYLOAD_LEN = payloadLen;
     debugMode = debug;
@@ -1061,7 +1072,7 @@ float ELM327_Simtec_565::getINJECTOR_PULSE()
 
         if (debugMode) 
 		{
-            Serial.println(F("INJECTOR PULSE: "));
+            Serial.print(F("INJECTOR PULSE: "));
             Serial.println(MathValue + MathValue1);
         }
 
@@ -1105,7 +1116,7 @@ int ELM327_Simtec_565::getREQUIRED_MOTOR_RPM()
 
         if (debugMode) 
 		{
-            Serial.println(F("REQUIRED MOTOR RPM: "));
+            Serial.print(F("REQUIRED MOTOR RPM: "));
             Serial.println(MathValue);
         }
 
@@ -1147,7 +1158,7 @@ float ELM327_Simtec_565::getLAMBDA_VCC()
 
         if (debugMode) 
 		{
-            Serial.println(F("LAMBDA VCC: "));
+            Serial.print(F("LAMBDA VCC: "));
             Serial.println(MathValue);
         }
 
@@ -1275,7 +1286,7 @@ float ELM327_Simtec_565::getTROTTLE_POS()
 
         if (debugMode) 
 		{
-            Serial.println(F("TROTTLE POS: "));
+            Serial.print(F("TROTTLE POS: "));
             Serial.println(MathValue);
         }
 
