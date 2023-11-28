@@ -2,7 +2,7 @@ This is a library that has been modified to read from Opel (and other??) vehicle
 It is still in alpha and is still being developed, so it is far from finished. But you can connect to a control unit and read out the raw data.
 Since the original library has no function for reading out direct hex values, I used it for old cars and got the basic function to work.
 
-
+### Thx for Write all PowerBroker2
 https://github.com/PowerBroker2/ELMduino
 
 Here you will find the original files, which can also be used to read out CAN and also have other protocols. Only ISO 14230-4 KWP(FAST and 5 baud) is directly supported in this library.
@@ -88,9 +88,9 @@ void loop()
 
 
 # Protocols:
-```C++
-#4        - ISO 14230-4 KWP (5 baud init)
-#5        - ISO 14230-4 KWP (fast init)
+```txt
+4        - ISO 14230-4 KWP (5 baud init)
+5        - ISO 14230-4 KWP (fast init)
 ```
 
 
